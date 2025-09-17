@@ -1,10 +1,10 @@
 // Konfigurasi situs
 window.APP_CONFIG = {
-  username: "admin",          // login halaman awal
-  password: "admin113",
+  username: "rian",          // login halaman awal
+  password: "puturian123",
   siteName: "Pretty Palettes Download",
 
   // 🔐 Sandi untuk membuka halaman upload
   // Ganti sesuai keinginanmu, misal: "rahasia-ku"
-  uploadKey: "admin12"
+  uploadKey: "rian113"
 };
