@@ -1,4 +1,4 @@
-// server.js — Supabase Storage, auto-create bucket, robust listing
+// server.js — Supabase Storage: upload + robust list + force-download
 const express = require("express");
 const multer  = require("multer");
 const path    = require("path");
@@ -11,15 +11,15 @@ const PORT = process.env.PORT || 3000;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE;
 const BUCKET       = (process.env.BUCKET_NAME || "yaatra-file").trim();
-const UPLOAD_PREFIX = "uploads"; // folder untuk file baru
+const UPLOAD_PREFIX = "uploads"; // folder default untuk file baru
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
-  console.error("Missing SUPABASE_URL / SUPABASE_SERVICE_ROLE");
+  console.error("Missing SUPABASE_URL / SUPABASE_SERVICE_ROLE env");
 }
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// Sajikan file statis
+// statics
 app.use(express.static(__dirname));
 
 /** Pastikan bucket ada & public */
@@ -27,33 +27,29 @@ async function ensureBucket() {
   try {
     const { data: bucket, error: getErr } = await supabase.storage.getBucket(BUCKET);
     if (getErr || !bucket) {
-      // tidak ada → buat baru (public)
       const { error: createErr } = await supabase.storage.createBucket(BUCKET, {
         public: true,
-        fileSizeLimit: null
+        fileSizeLimit: null,
       });
       if (createErr) throw createErr;
       console.log(`[storage] bucket "${BUCKET}" dibuat (public).`);
     } else if (!bucket.public) {
-      // ada tapi private → ubah ke public
       const { error: updErr } = await supabase.storage.updateBucket(BUCKET, { public: true });
       if (updErr) throw updErr;
       console.log(`[storage] bucket "${BUCKET}" diset public.`);
-    } else {
-      console.log(`[storage] bucket "${BUCKET}" sudah ada & public.`);
     }
   } catch (e) {
     console.error("[storage] ensureBucket error:", e.message);
   }
 }
 
-// ===== Upload (pakai memory, tidak menyentuh disk Railway) =====
+/** Multer di memory (tidak tulis disk Railway) */
 const upload = multer({ storage: multer.memoryStorage() });
 
+/** Upload endpoint */
 app.post("/api/upload", upload.array("file", 20), async (req, res) => {
   try {
     await ensureBucket();
-
     const files = req.files || [];
     if (files.length === 0) return res.json({ ok: true, count: 0 });
 
@@ -66,10 +62,10 @@ app.post("/api/upload", upload.array("file", 20), async (req, res) => {
       const key  = `${UPLOAD_PREFIX}/${base}__${now}${ext}`;
       const contentType = f.mimetype || mime.lookup(ext) || "application/octet-stream";
 
-      const { error } = await supabase.storage
-        .from(BUCKET)
-        .upload(key, f.buffer, { contentType, upsert: false });
-
+      const { error } = await supabase.storage.from(BUCKET).upload(key, f.buffer, {
+        contentType,
+        upsert: false,
+      });
       if (error) throw error;
       keys.push(key);
     }
@@ -81,7 +77,29 @@ app.post("/api/upload", upload.array("file", 20), async (req, res) => {
   }
 });
 
-// ===== Helper: list isi folder (rekursif 1–2 tingkat) =====
+/** Helper: ubah entry Supabase -> item untuk UI (termasuk link download paksa) */
+function mapEntryToItem(prefix, entry) {
+  const name = entry.name;
+  const ext  = path.extname(name);
+  const type = entry.metadata?.mimetype || mime.lookup(ext) || "application/octet-stream";
+  const size = entry.metadata?.size ?? entry.size ?? 0;
+  const updated = entry.updated_at || entry.created_at || new Date().toISOString();
+  const fullKey = prefix ? `${prefix}/${name}` : name;
+  const disp = name.includes("__") ? name.split("__")[0] + ext : name;
+
+  const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(fullKey);
+  return {
+    name: disp,
+    url: pub.publicUrl,                  // preview
+    key: fullKey,
+    type,
+    size,
+    uploadedAt: new Date(updated).getTime(),
+    dl: `/api/dl?key=${encodeURIComponent(fullKey)}`, // force download
+  };
+}
+
+/** List isi folder (rekursif satu tingkat) */
 async function listFolder(prefix = "") {
   const out = [];
   let offset = 0;
@@ -98,24 +116,9 @@ async function listFolder(prefix = "") {
     for (const entry of data) {
       const isFile = typeof entry.id === "string" || typeof entry.size === "number";
       if (isFile) {
-        const name = entry.name;
-        const ext  = path.extname(name);
-        const type = entry.metadata?.mimetype || mime.lookup(ext) || "application/octet-stream";
-        const size = entry.metadata?.size ?? entry.size ?? 0;
-        const updated = entry.updated_at || entry.created_at || new Date().toISOString();
-        const fullKey = prefix ? `${prefix}/${name}` : name;
-        const disp = name.includes("__") ? name.split("__")[0] + ext : name;
-
-        const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(fullKey);
-        out.push({
-          name: disp,
-          url: pub.publicUrl,
-          type,
-          size,
-          uploadedAt: new Date(updated).getTime()
-        });
+        out.push(mapEntryToItem(prefix, entry));
       } else {
-        // folder → telusuri satu tingkat lagi
+        // folder → telusuri subfolder
         const subPrefix = prefix ? `${prefix}/${entry.name}` : entry.name;
         const subItems = await listFolder(subPrefix);
         out.push(...subItems);
@@ -129,37 +132,35 @@ async function listFolder(prefix = "") {
   return out;
 }
 
-// ===== List semua file dari root + uploads + (jika ada) YYYY/MM =====
+/** Endpoint: daftar file (root + uploads + pola YYYY/MM bila ada) */
 app.get("/api/files", async (_req, res) => {
   try {
     await ensureBucket();
 
     const collected = [];
-    // root
-    collected.push(...await listFolder(""));
-    // uploads/
-    collected.push(...await listFolder(UPLOAD_PREFIX));
+    collected.push(...await listFolder(""));                // root
+    collected.push(...await listFolder(UPLOAD_PREFIX));     // uploads/
 
     // pola lama YYYY/MM (jika ada)
     const { data: rootList } = await supabase.storage.from(BUCKET).list("");
     const years = (rootList || []).filter(e => !e.id && /^\d{4}$/.test(e.name)).map(e => e.name);
     for (const y of years) {
       const { data: months } = await supabase.storage.from(BUCKET).list(y);
-      for (const m of (months || []).filter(e => !e.id && /^\d{2}$/.test(e.name)).map(e => e.name)) {
-        collected.push(...await listFolder(`${y}/${m}`));
-      }
+      const mm = (months || []).filter(e => !e.id && /^\d{2}$/.test(e.name)).map(e => e.name);
+      for (const m of mm) collected.push(...await listFolder(`${y}/${m}`));
     }
 
-    // dedup
+    // dedup + urut terbaru
     const seen = new Set();
     const items = [];
     for (const it of collected) {
-      const k = `${it.url}|${it.size}|${it.uploadedAt}`;
+      const k = `${it.key}|${it.size}|${it.uploadedAt}`;
       if (seen.has(k)) continue;
       seen.add(k);
       items.push(it);
     }
     items.sort((a,b)=> b.uploadedAt - a.uploadedAt);
+
     res.json(items);
   } catch (e) {
     console.error(e);
@@ -167,73 +168,25 @@ app.get("/api/files", async (_req, res) => {
   }
 });
 
-// Health & root redirect
-app.get("/health", (_req,res)=>res.type("text/plain").send("ok"));
-app.get("/", (_req,res)=>res.redirect("/login.html"));
-
-// ===== helper: buat signed URL yang memaksa download =====
-async function makeDownloadLink(key) {
-  // Nama file tampil tanpa suffix __timestamp
-  const ext = path.extname(key);
-  const base = path.basename(key, ext);
-  const niceName = base.includes("__") ? base.split("__")[0] + ext : base + ext;
-
-  // URL bertanda tangan berlaku 60 detik & memaksa download
-  const { data, error } = await supabase
-    .from ? { data: null, error: new Error("wrong client") } // guard kalau IDE auto-fix salah
-    : {};
-  // (pemanggilan yang benar:)
-  const out = await supabase.storage
-    .from(BUCKET)
-    .createSignedUrl(key, 60, { download: niceName });
-
-  if (out.error) throw out.error;
-  return out.data.signedUrl;
-}
-
-// ===== route: redirect ke signed URL (ini yang dipakai tombol Download) =====
+/** Endpoint download: redirect ke signed URL (paksa download → fix Safari) */
 app.get("/api/dl", async (req, res) => {
   try {
     const key = req.query.key;
     if (!key) return res.status(400).send("Missing key");
-    const signed = await supabase.storage
+    const niceName = path.basename(key).split("__")[0];
+    const { data, error } = await supabase.storage
       .from(BUCKET)
-      .createSignedUrl(key, 60, { download: path.basename(key).split("__")[0] });
-    if (signed.error) return res.status(404).send("File not found");
-    return res.redirect(signed.data.signedUrl);
+      .createSignedUrl(key, 60, { download: niceName });
+    if (error) return res.status(404).send("File not found");
+    return res.redirect(data.signedUrl);
   } catch (e) {
     console.error("dl error:", e.message);
     return res.status(500).send("Download error");
   }
 });
 
-// ====== (REPLACE) bagian yang membuat daftar file -> tambahkan properti `dl` ======
-function mapEntryToItem(prefix, entry) {
-  const name = entry.name;
-  const ext  = path.extname(name);
-  const type = entry.metadata?.mimetype || mime.lookup(ext) || "application/octet-stream";
-  const size = entry.metadata?.size ?? entry.size ?? 0;
-  const updated = entry.updated_at || entry.created_at || new Date().toISOString();
-  const fullKey = prefix ? `${prefix}/${name}` : name;
-  const disp = name.includes("__") ? name.split("__")[0] + ext : name;
-
-  const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(fullKey);
-  return {
-    name: disp,
-    url: pub.publicUrl,           // boleh untuk preview
-    key: fullKey,                 // simpan key aslinya
-    type,
-    size,
-    uploadedAt: new Date(updated).getTime(),
-    // link download via server (paksa download di Safari)
-    dl: `/api/dl?key=${encodeURIComponent(fullKey)}`
-  };
-}
-
-// Di fungsi listFolder(...) ganti bagian push object menjadi:
-out.push(mapEntryToItem(prefix, entry));
-
-// Di endpoint GET /api/files pastikan item yang dikirim berisi `dl` (kalau kamu pakai kodeku sebelumnya, cukup pastikan mapping di atas dipakai).
-
+// Health & root redirect
+app.get("/health", (_req,res)=>res.type("text/plain").send("ok"));
+app.get("/", (_req,res)=>res.redirect("/login.html"));
 
 app.listen(PORT, () => console.log(`Server on http://localhost:${PORT}`));
