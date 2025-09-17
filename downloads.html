@@ -165,31 +165,33 @@
     const $btnClear = document.getElementById('btnClear');
 
     function render(items){
-      $list.innerHTML = '';
-      if(items.length === 0){
-        $list.innerHTML = `<div class="muted">Tidak ada hasil.</div>`;
-      }else{
-        items.forEach(f => {
-          const el = document.createElement('div');
-          el.className = 'card';
-          el.innerHTML = `
-            <div class="file-item">
-              <div>
-                <div style="font-weight:800">${f.name}</div>
-                <div class="meta">
-                  <span>Tipe: ${f.type}</span>
-                  <span>Ukuran: ${readableSize(f.size)}</span>
-                  <span>Diunggah: ${formatDate(f.uploadedAt)}</span>
-                </div>
-              </div>
-              <a class="button" href="${f.url}" download>Download</a>
+  $list.innerHTML = '';
+  if(items.length === 0){
+    $list.innerHTML = `<div class="muted">Tidak ada hasil.</div>`;
+  }else{
+    items.forEach(f => {
+      const el = document.createElement('div');
+      el.className = 'card';
+      el.innerHTML = `
+        <div class="file-item">
+          <div>
+            <div style="font-weight:800">${f.name}</div>
+            <div class="meta">
+              <span>Tipe: ${f.type}</span>
+              <span>Ukuran: ${readableSize(f.size)}</span>
+              <span>Diunggah: ${formatDate(f.uploadedAt)}</span>
             </div>
-          `;
-          $list.appendChild(el);
-        });
-      }
-      $info.textContent = `${items.length} dari ${ALL_FILES.length} file ditampilkan`;
-    }
+          </div>
+          <!-- Pakai f.dl jika tersedia (server /api/dl), fallback ke f.url -->
+          <a class="button" href="${f.dl || f.url}">Download</a>
+        </div>
+      `;
+      $list.appendChild(el);
+    });
+  }
+  $info.textContent = `${items.length} dari ${ALL_FILES.length} file ditampilkan`;
+}
+
 
     function applyFilters(){
       const q = $search.value.trim().toLowerCase();

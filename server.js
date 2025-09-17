@@ -171,4 +171,69 @@ app.get("/api/files", async (_req, res) => {
 app.get("/health", (_req,res)=>res.type("text/plain").send("ok"));
 app.get("/", (_req,res)=>res.redirect("/login.html"));
 
+// ===== helper: buat signed URL yang memaksa download =====
+async function makeDownloadLink(key) {
+  // Nama file tampil tanpa suffix __timestamp
+  const ext = path.extname(key);
+  const base = path.basename(key, ext);
+  const niceName = base.includes("__") ? base.split("__")[0] + ext : base + ext;
+
+  // URL bertanda tangan berlaku 60 detik & memaksa download
+  const { data, error } = await supabase
+    .from ? { data: null, error: new Error("wrong client") } // guard kalau IDE auto-fix salah
+    : {};
+  // (pemanggilan yang benar:)
+  const out = await supabase.storage
+    .from(BUCKET)
+    .createSignedUrl(key, 60, { download: niceName });
+
+  if (out.error) throw out.error;
+  return out.data.signedUrl;
+}
+
+// ===== route: redirect ke signed URL (ini yang dipakai tombol Download) =====
+app.get("/api/dl", async (req, res) => {
+  try {
+    const key = req.query.key;
+    if (!key) return res.status(400).send("Missing key");
+    const signed = await supabase.storage
+      .from(BUCKET)
+      .createSignedUrl(key, 60, { download: path.basename(key).split("__")[0] });
+    if (signed.error) return res.status(404).send("File not found");
+    return res.redirect(signed.data.signedUrl);
+  } catch (e) {
+    console.error("dl error:", e.message);
+    return res.status(500).send("Download error");
+  }
+});
+
+// ====== (REPLACE) bagian yang membuat daftar file -> tambahkan properti `dl` ======
+function mapEntryToItem(prefix, entry) {
+  const name = entry.name;
+  const ext  = path.extname(name);
+  const type = entry.metadata?.mimetype || mime.lookup(ext) || "application/octet-stream";
+  const size = entry.metadata?.size ?? entry.size ?? 0;
+  const updated = entry.updated_at || entry.created_at || new Date().toISOString();
+  const fullKey = prefix ? `${prefix}/${name}` : name;
+  const disp = name.includes("__") ? name.split("__")[0] + ext : name;
+
+  const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(fullKey);
+  return {
+    name: disp,
+    url: pub.publicUrl,           // boleh untuk preview
+    key: fullKey,                 // simpan key aslinya
+    type,
+    size,
+    uploadedAt: new Date(updated).getTime(),
+    // link download via server (paksa download di Safari)
+    dl: `/api/dl?key=${encodeURIComponent(fullKey)}`
+  };
+}
+
+// Di fungsi listFolder(...) ganti bagian push object menjadi:
+out.push(mapEntryToItem(prefix, entry));
+
+// Di endpoint GET /api/files pastikan item yang dikirim berisi `dl` (kalau kamu pakai kodeku sebelumnya, cukup pastikan mapping di atas dipakai).
+
+
 app.listen(PORT, () => console.log(`Server on http://localhost:${PORT}`));
