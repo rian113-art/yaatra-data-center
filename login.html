@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Login</title>
+  <link rel="stylesheet" href="assets/style.css">
+  <script src="assets/config.js"></script>
+  <style>
+    /* center card */
+    .center-viewport{ min-height:100svh; display:grid; place-items:center; padding:32px; }
+    .login-card{ width:100%; max-width:520px; }
+
+    /* input + toggle */
+    .input-group{ position:relative; }
+    .input-group .toggle{
+      position:absolute; right:8px; top:50%; transform:translateY(-50%);
+      background:#fff; border:1px solid #CBD5E1; border-radius:8px;
+      padding:6px 10px; font-size:12px; cursor:pointer;
+    }
+    .input-group .toggle:hover{ background:#f8fafc; }
+
+    /* spacing baru */
+    .form-actions{ margin-top:14px; }         /* jarak atas tombol login */
+    .login-footer{ margin-top:20px; }         /* jarak atas bagian palette */
+
+    @media (max-width:640px){
+      .center-viewport{ padding:16px; }
+      .card{ padding:20px; border-radius:16px; }
+      .button{ width:100%; }
+      .input{ font-size:16px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container center-viewport">
+    <div class="card login-card">
+      <h2 style="margin:0 0 8px">Masuk</h2>
+      <p style="margin:0 0 18px;color:#475569">Login untuk mengakses halaman download.</p>
+
+      <form id="login-form" class="grid" onsubmit="return false">
+        <div>
+          <label>Username</label>
+          <input class="input" id="user" placeholder="username" autocomplete="username">
+        </div>
+        <div>
+          <label>Password</label>
+          <div class="input-group">
+            <input class="input" id="pass" type="password" placeholder="password" autocomplete="current-password">
+            <button type="button" id="toggle-pass" class="toggle" aria-pressed="false" aria-label="Tampilkan sandi">Lihat</button>
+          </div>
+        </div>
+
+        <!-- TOMBOL LOGIN DIBERI SPACING -->
+        <div class="form-actions">
+          <button class="button" id="login-btn" style="width:100%">Login</button>
+        </div>
+      </form>
+
+      <!-- BAGIAN PALETTE DIBERI SPACING -->
+      <div class="footer login-footer">
+        <span class="badge">Palette</span>
+        <div class="palette">
+          <div class="swatch whisper"></div>
+          <div class="swatch crystal"></div>
+          <div class="swatch linen"></div>
+          <div class="swatch golden"></div>
+          <div class="swatch ivory"></div>
+          <div class="swatch minted"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const cfg = window.APP_CONFIG || {};
+
+    // toggle show/hide password
+    (function(){
+      const input = document.getElementById('pass');
+      const btn   = document.getElementById('toggle-pass');
+      btn.addEventListener('click', ()=>{
+        const show = input.type === 'password';
+        input.type = show ? 'text' : 'password';
+        btn.textContent = show ? 'Sembunyi' : 'Lihat';
+        btn.setAttribute('aria-pressed', String(show));
+        input.focus();
+      });
+    })();
+
+    // login
+    document.getElementById('login-btn').addEventListener('click', () => {
+      const u = document.getElementById('user').value.trim();
+      const p = document.getElementById('pass').value;
+      if(u===cfg.username && p===cfg.password){
+        sessionStorage.setItem('loggedIn','1');
+        window.location.href = 'downloads.html';
+      }else{
+        alert('Username atau password salah.');
+      }
+    });
+  </script>
+</body>
+</html>

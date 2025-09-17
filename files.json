@@ -1,0 +1,14 @@
+[
+  {
+    "name": "Contoh-Dokumen.txt",
+    "desc": "File teks contoh",
+    "url": "downloads/Contoh-Dokumen.txt",
+    "size": "75 B"
+  },
+  {
+    "name": "Poster-Palette.pdf",
+    "desc": "PDF contoh (placeholder)",
+    "url": "downloads/Poster-Palette.pdf",
+    "size": "51 B"
+  }
+]

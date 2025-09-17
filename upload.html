@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Upload File</title>
+  <link rel="stylesheet" href="assets/style.css">
+  <script src="assets/config.js"></script>
+  <script src="assets/app.js"></script>
+  <style>
+    .page { min-height: 100svh; display: flex; flex-direction: column; }
+    main.page-main { flex: 1; }
+    .dropzone{
+      border: 2px dashed var(--crystal); background:#fff; border-radius:16px;
+      padding:22px; text-align:center; transition:.15s ease;
+    }
+    .dropzone:hover{ filter:brightness(.98) }
+    .dropzone.dragover{ border-color:var(--whisper); box-shadow:0 0 0 4px rgba(121,157,172,.2) }
+    .queue{ margin-top:14px; display:grid; gap:10px }
+    .q-item{ display:flex; align-items:center; justify-content:space-between; gap:10px;
+      background:#fff; border:1px solid #E2E8F0; border-radius:12px; padding:10px 12px }
+    .q-name{ font-weight:600 } .q-meta{ font-size:12px; color:#64748B }
+    .q-remove{ border:1px solid #E2E8F0; background:#fff; padding:6px 10px; border-radius:8px; cursor:pointer }
+    .q-remove:hover{ background:#f8fafc }
+    .queue-actions{ display:flex; gap:8px; flex-wrap:wrap; margin-top:8px }
+  </style>
+</head>
+<body onload="requireAuth()">
+<div class="page">
+
+  <!-- HEADER -->
+  <header class="site-header">
+    <div class="site-wrap inner">
+      <div class="brand">
+        <svg class="brand-mark" width="28" height="28" viewBox="0 0 28 28" aria-hidden="true">
+          <rect x="2"  y="14" width="6" height="12" rx="2" fill="var(--logo-base)"/>
+          <rect x="11" y="8"  width="6" height="18" rx="2" fill="var(--logo-accent)"/>
+          <rect x="20" y="4"  width="6" height="22" rx="2" fill="var(--logo-base)"/>
+        </svg>
+        <span class="brand-text">Yaatra Data Center</span>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+        <a class="button" href="downloads.html">Daftar File</a>
+        <button class="button logout-btn" onclick="setLoggedIn(false);location.href='login.html'">Logout</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN -->
+  <main class="site-wrap page-main">
+    <div class="card" style="margin-top:14px">
+      <h2 style="margin:0 0 8px">Upload File</h2>
+      <p class="muted" style="margin:0 0 16px">Tarik & jatuhkan file ke area di bawah, atau klik untuk memilih. Kamu bisa meninjau dan membatalkan file sebelum mengunggah.</p>
+
+      <div id="dropzone" class="dropzone">
+        <div style="font-weight:800">Tarik & Letakkan File di Sini</div>
+        <div class="muted" style="margin-top:6px">atau klik untuk memilih dari perangkat</div>
+        <input id="fileInput" type="file" multiple style="display:none">
+      </div>
+
+      <div id="queue" class="queue"></div>
+
+      <div class="queue-actions">
+        <button id="btnBrowse" class="button">Pilih File</button>
+        <button id="btnClear" class="button" style="background:#e2e8f0;color:#1E293B">Batalkan Semua</button>
+        <button id="btnUpload" class="button">Upload</button>
+      </div>
+
+      <div id="status" style="margin-top:12px;color:#334155;font-size:14px"></div>
+    </div>
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="site-footer">
+    <div class="site-wrap inner">
+      <section>
+        <h3>Kontak</h3>
+        <p>Email: support@yaatra.id<br>Telepon: +62 812 3456 7890</p>
+      </section>
+      <section>
+        <h3>Tentang Website</h3>
+        <p>Yaatra Data Center memudahkan Anda mengunggah dan membagikan berkas.
+           Semua file disimpan terstruktur dan langsung tersedia untuk diunduh pada halaman daftar file.</p>
+      </section>
+    </div>
+  </footer>
+
+</div>
+
+<script>
+  // ====== Queue upload (drag & drop + cancel) ======
+  let queue = [];
+  function keyOf(f){ return f.name + '|' + f.size + '|' + f.lastModified; }
+  function addFiles(list){ const seen = new Set(queue.map(keyOf)); for(const f of list){ const k=keyOf(f); if(!seen.has(k)){ queue.push(f); seen.add(k);} } renderQueue(); }
+  function removeAt(i){ queue.splice(i,1); renderQueue(); }
+  function clearQueue(){ queue=[]; renderQueue(); }
+
+  function renderQueue(){
+    const box = document.getElementById('queue'); box.innerHTML='';
+    if(queue.length===0){ box.innerHTML = `<div class="q-meta" style="text-align:center">Belum ada file dipilih.</div>`; }
+    else{
+      queue.forEach((f,i)=>{
+        const el=document.createElement('div'); el.className='q-item';
+        el.innerHTML=`<div><div class="q-name">${f.name}</div><div class="q-meta">${f.type||'application/octet-stream'} • ${readableSize(f.size)}</div></div><button class="q-remove" data-i="${i}">Hapus</button>`;
+        box.appendChild(el);
+      });
+    }
+    document.getElementById('btnUpload').disabled = queue.length===0;
+    document.getElementById('btnClear').disabled  = queue.length===0;
+  }
+
+  const dz = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+  const btnBrowse = document.getElementById('btnBrowse');
+  const btnClear = document.getElementById('btnClear');
+  const btnUpload = document.getElementById('btnUpload');
+  const statusEl = document.getElementById('status');
+
+  renderQueue();
+
+  dz.addEventListener('click', ()=> fileInput.click());
+  btnBrowse.addEventListener('click', ()=> fileInput.click());
+  fileInput.addEventListener('change', e=>{ addFiles(e.target.files); fileInput.value=''; });
+
+  ['dragenter','dragover'].forEach(evt=>{
+    dz.addEventListener(evt, e=>{ e.preventDefault(); dz.classList.add('dragover'); });
+  });
+  ['dragleave','drop'].forEach(evt=>{
+    dz.addEventListener(evt, e=>{ e.preventDefault(); dz.classList.remove('dragover'); });
+  });
+  dz.addEventListener('drop', e=> addFiles(e.dataTransfer.files));
+
+  document.getElementById('queue').addEventListener('click', e=>{
+    const btn=e.target.closest('.q-remove'); if(!btn) return;
+    removeAt(parseInt(btn.getAttribute('data-i'),10));
+  });
+
+  btnClear.addEventListener('click', ()=>{ clearQueue(); statusEl.textContent='Antrian dikosongkan.'; });
+
+  btnUpload.addEventListener('click', async ()=>{
+    if(queue.length===0) return;
+    const fd = new FormData(); queue.forEach(f=>fd.append('file',f));
+    btnUpload.disabled = btnClear.disabled = btnBrowse.disabled = true;
+    statusEl.textContent='Mengunggah...';
+    try{
+      const res = await fetch('/api/upload', { method:'POST', body: fd });
+      if(!res.ok) throw new Error('Gagal upload');
+      const data = await res.json();
+      statusEl.innerHTML = `✅ ${data.count} file berhasil diunggah. <a href="downloads.html">Lihat daftar file</a>`;
+      clearQueue();
+    }catch(err){ statusEl.textContent='❌ '+err.message; }
+    finally{ btnUpload.disabled=false; btnBrowse.disabled=false; btnClear.disabled=queue.length===0; }
+  });
+</script>
+</body>
+</html>

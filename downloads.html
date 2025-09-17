@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Download Files</title>
+  <link rel="stylesheet" href="assets/style.css">
+  <script src="assets/config.js"></script>
+  <script src="assets/app.js"></script>
+  <style>
+    .site-wrap{max-width:960px;margin:0 auto;padding:0 16px}
+
+    /* Header */
+    header.site-header{background:var(--header-bg);border-radius:0 0 18px 18px;box-shadow:0 6px 16px rgba(0,0,0,.06);padding:14px 0;margin:0 0 18px 0}
+    .inner{display:grid;grid-template-columns:1fr;gap:12px}
+    @media(min-width:768px){.inner{grid-template-columns:1fr auto}}
+    .brand{display:inline-flex;align-items:center;gap:10px}
+    .brand-text{font-weight:800;letter-spacing:.2px;font-size:18px}
+    .actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+    .logout-btn{width:100%}@media(min-width:768px){.logout-btn{width:auto}}
+
+    /* Logo chart */
+    .brand-mark{display:block}
+
+    /* Toolbar filter/search */
+    .toolbar{display:grid;gap:10px;margin:0 0 14px}
+    @media(min-width:768px){.toolbar{grid-template-columns:1fr 220px auto;align-items:end}}
+    .input,.select{width:100%;padding:12px 14px;border-radius:12px;border:1px solid #CBD5E1;background:#fff}
+    .select:focus,.input:focus{outline:none;border-color:var(--crystal);box-shadow:0 0 0 3px rgba(179,195,208,.35)}
+    .muted{color:#64748B;font-size:13px}
+
+    /* List file */
+    .files-card{margin-top:14px}
+    .file-item{display:grid;gap:10px}
+    @media(min-width:768px){.file-item{grid-template-columns:1fr auto;align-items:center}}
+    .file-item .meta{font-size:12px;color:#64748B;margin-top:6px;display:flex;gap:12px;flex-wrap:wrap}
+    .file-item .button{width:100%}@media(min-width:768px){.file-item .button{width:auto}}
+
+    /* Footer */
+    footer.site-footer{margin-top:20px;background:var(--footer-bg);border-radius:18px 18px 0 0;box-shadow:0 -6px 16px rgba(0,0,0,.06);padding:22px 0}
+    .footer-inner{display:grid;gap:18px;grid-template-columns:1fr}
+    @media(min-width:768px){.footer-inner{grid-template-columns:1fr 1fr}}
+    .site-footer h3{margin:0 0 8px;font-size:16px;color:var(--ink)}
+    .site-footer p{margin:0;color:#354254;line-height:1.6}
+
+    /* ===== Modal Upload Key (overlay fix) ===== */
+    .modal-layer{
+      position:fixed; left:0; top:0; width:100vw; height:100vh;
+      display:none; align-items:center; justify-content:center;
+      background:rgba(15,23,42,.5);
+      padding:16px;
+      z-index:2147483647; /* di atas semuanya */
+    }
+    .modal-layer.open{ display:flex; }
+    .modal-panel{
+      width:100%; max-width:420px; background:#fff; border-radius:16px;
+      box-shadow:0 20px 40px rgba(0,0,0,.25); padding:20px;
+    }
+    .modal-panel h3{ margin:0 0 6px }
+    .modal-panel p{ margin:0 0 14px; color:#475569; font-size:14px }
+    .modal-row{ display:grid; gap:10px; grid-template-columns:1fr auto }
+    @media(max-width:480px){ .modal-row{ grid-template-columns:1fr } }
+    .error-text{ color:#b91c1c; font-size:12px; margin-top:6px; display:none }
+    .error-text.show{ display:block }
+    .input-wrap{ position:relative }
+    .toggle{ position:absolute; right:8px; top:50%; transform:translateY(-50%); background:#fff; border:1px solid #CBD5E1; border-radius:8px; padding:6px 10px; font-size:12px; cursor:pointer }
+    .toggle:hover{ background:#f8fafc }
+
+    /* Hilangkan scroll body saat modal terbuka */
+    body.modal-open{ overflow:hidden }
+  </style>
+</head>
+<body onload="requireAuth()">
+
+  <!-- HEADER -->
+  <header class="site-header">
+    <div class="site-wrap inner">
+      <div class="brand">
+        <svg class="brand-mark" width="28" height="28" viewBox="0 0 28 28" aria-hidden="true">
+          <rect x="2"  y="14" width="6" height="12" rx="2" fill="var(--logo-base)"/>
+          <rect x="11" y="8"  width="6" height="18" rx="2" fill="var(--logo-accent)"/>
+          <rect x="20" y="4"  width="6" height="22" rx="2" fill="var(--logo-base)"/>
+        </svg>
+        <span class="brand-text">Yaatra Data Center</span>
+      </div>
+      <div class="actions">
+        <button id="openUpload" class="button">Upload File</button>
+        <button class="button logout-btn" onclick="setLoggedIn(false);location.href='login.html'">Logout</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN -->
+  <main class="site-wrap">
+    <div class="card files-card">
+      <h2 style="margin:0 0 6px">File Tersedia</h2>
+      <p class="muted" style="margin:0 0 14px">Cari berdasarkan nama atau filter berdasarkan tipe file.</p>
+
+      <!-- Toolbar -->
+      <div class="toolbar">
+        <div>
+          <label for="search" class="muted">Cari nama file</label>
+          <input id="search" class="input" placeholder="misal: laporan, foto, .pdf">
+        </div>
+        <div>
+          <label for="typeFilter" class="muted">Filter tipe</label>
+          <select id="typeFilter" class="select">
+            <option value="__ALL__">Semua tipe</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button id="btnClear" class="button" style="background:#e2e8f0;color:#1E293B;flex:1">Reset</button>
+        </div>
+      </div>
+
+      <div class="muted" id="resultInfo" style="margin-bottom:10px">Memuat...</div>
+      <div id="list" class="grid" style="gap:16px"></div>
+    </div>
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="site-footer">
+    <div class="site-wrap footer-inner">
+      <section>
+        <h3>Kontak</h3>
+        <p>Email: support@yaatra.id<br>Telepon: +62 812 3456 7890</p>
+      </section>
+      <section>
+        <h3>Tentang Website</h3>
+        <p>Yaatra Data Center adalah layanan sederhana untuk menyimpan dan membagikan berkas secara aman.
+           Seluruh dokumen langsung tersedia untuk diunduh setelah diunggah, dan dapat diakses baik dari
+           desktop maupun perangkat seluler.</p>
+      </section>
+    </div>
+  </footer>
+
+  <!-- ===== Modal Sandi Upload (overlay) ===== -->
+  <div id="uploadModal" class="modal-layer" aria-hidden="true">
+    <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="uploadTitle">
+      <h3 id="uploadTitle">Masukkan Sandi Upload</h3>
+      <p>Hanya pengguna yang berwenang yang dapat mengunggah berkas.</p>
+      <div class="modal-row">
+        <div class="input-wrap">
+          <input id="uploadKeyInput" class="input" type="password" placeholder="Sandi upload">
+          <button type="button" id="toggle-uploadkey" class="toggle" aria-pressed="false" aria-label="Tampilkan sandi">Lihat</button>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button id="cancelUpload" class="button" style="background:#e2e8f0;color:#1E293B" type="button">Batal</button>
+          <button id="confirmUpload" class="button" type="button">Lanjut</button>
+        </div>
+      </div>
+      <div id="uploadError" class="error-text">Sandi salah. Coba lagi.</div>
+    </div>
+  </div>
+
+  <script>
+    /* ===== Data & Render ===== */
+    let ALL_FILES = [];
+    let TYPES = new Set();
+
+    const $list = document.getElementById('list');
+    const $info = document.getElementById('resultInfo');
+    const $search = document.getElementById('search');
+    const $type = document.getElementById('typeFilter');
+    const $btnClear = document.getElementById('btnClear');
+
+    function render(items){
+      $list.innerHTML = '';
+      if(items.length === 0){
+        $list.innerHTML = `<div class="muted">Tidak ada hasil.</div>`;
+      }else{
+        items.forEach(f => {
+          const el = document.createElement('div');
+          el.className = 'card';
+          el.innerHTML = `
+            <div class="file-item">
+              <div>
+                <div style="font-weight:800">${f.name}</div>
+                <div class="meta">
+                  <span>Tipe: ${f.type}</span>
+                  <span>Ukuran: ${readableSize(f.size)}</span>
+                  <span>Diunggah: ${formatDate(f.uploadedAt)}</span>
+                </div>
+              </div>
+              <a class="button" href="${f.url}" download>Download</a>
+            </div>
+          `;
+          $list.appendChild(el);
+        });
+      }
+      $info.textContent = `${items.length} dari ${ALL_FILES.length} file ditampilkan`;
+    }
+
+    function applyFilters(){
+      const q = $search.value.trim().toLowerCase();
+      const t = $type.value;
+      let out = ALL_FILES.slice();
+      if(q){ out = out.filter(f => f.name.toLowerCase().includes(q)); }
+      if(t !== '__ALL__'){ out = out.filter(f => f.type === t); }
+      render(out);
+    }
+    function debounce(fn, ms){ let id; return (...a)=>{ clearTimeout(id); id=setTimeout(()=>fn(...a), ms); }; }
+
+    loadFiles().then(items => {
+      ALL_FILES = items;
+      TYPES = new Set(items.map(f => f.type));
+      for(const t of Array.from(TYPES).sort()){
+        const o = document.createElement('option'); o.value = t; o.textContent = t; $type.appendChild(o);
+      }
+      applyFilters();
+    }).catch(err => { $info.textContent = 'Gagal memuat daftar file: ' + err.message; });
+
+    $search.addEventListener('input', debounce(applyFilters, 250));
+    $type.addEventListener('change', applyFilters);
+    $btnClear.addEventListener('click', () => { $search.value=''; $type.value='__ALL__'; applyFilters(); });
+
+    /* ===== Modal Upload Key (overlay fixed + lock scroll) ===== */
+    const modal = document.getElementById('uploadModal');
+    const openBtn = document.getElementById('openUpload');
+    const cancelBtn = document.getElementById('cancelUpload');
+    const confirmBtn = document.getElementById('confirmUpload');
+    const keyInput = document.getElementById('uploadKeyInput');
+    const errText = document.getElementById('uploadError');
+    const toggleKeyBtn = document.getElementById('toggle-uploadkey');
+    const UPLOAD_KEY = (window.APP_CONFIG && window.APP_CONFIG.uploadKey) ? String(window.APP_CONFIG.uploadKey) : "uploader123";
+
+    function openModal(){
+      modal.classList.add('open');
+      modal.setAttribute('aria-hidden','false');
+      document.body.classList.add('modal-open'); // lock scroll
+      errText.classList.remove('show');
+      keyInput.value = '';
+      setTimeout(()=> keyInput.focus(), 0);
+    }
+    function closeModal(){
+      modal.classList.remove('open');
+      modal.setAttribute('aria-hidden','true');
+      document.body.classList.remove('modal-open');
+    }
+    function tryGo(){
+      if(keyInput.value === UPLOAD_KEY){ closeModal(); location.href='upload.html'; }
+      else { errText.classList.add('show'); keyInput.focus(); keyInput.select(); }
+    }
+
+    toggleKeyBtn.addEventListener('click', ()=>{
+      const show = keyInput.type === 'password';
+      keyInput.type = show ? 'text' : 'password';
+      toggleKeyBtn.textContent = show ? 'Sembunyi' : 'Lihat';
+    });
+
+    openBtn.addEventListener('click', openModal);
+    cancelBtn.addEventListener('click', closeModal);
+    confirmBtn.addEventListener('click', tryGo);
+    keyInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') tryGo(); });
+    // klik area gelap untuk menutup
+    modal.addEventListener('click', (e)=>{ if(e.target === modal) closeModal(); });
+  </script>
+</body>
+</html>
