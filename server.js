@@ -63,6 +63,16 @@ app.get("/", (req, res) => {
   res.redirect("/login.html");
 });
 
+// Healthcheck sederhana (200 OK)
+app.get("/health", (req, res) => {
+  res.type("text/plain").send("ok");
+});
+
+// (opsional) redirect root "/" ke login biar enak dipakai
+app.get("/", (req, res) => {
+  res.redirect("/login.html");
+});
+
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
