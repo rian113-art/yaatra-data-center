@@ -58,6 +58,11 @@ app.get("/api/files", async (req, res) => {
 app.post("/api/upload", upload.array("file", 20), (req, res) => {
   res.json({ ok: true, count: req.files?.length || 0, files: req.files?.map(f => f.filename) });
 });
+// arahkan root "/" ke halaman login
+app.get("/", (req, res) => {
+  res.redirect("/login.html");
+});
+
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
