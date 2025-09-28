@@ -183,7 +183,7 @@
             </div>
           </div>
           <!-- Pakai f.dl jika tersedia (server /api/dl), fallback ke f.url -->
-          <a class="button" href="${f.dl || f.url}">Download</a>
+          <a class="button" href="${f.url}" download="${f.name}">Download</a>
         </div>
       `;
       $list.appendChild(el);
